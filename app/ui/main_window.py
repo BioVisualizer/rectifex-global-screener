@@ -2,10 +2,15 @@
 
 from __future__ import annotations
 
+from concurrent.futures import Future, ThreadPoolExecutor
+from pathlib import Path
 from typing import Dict, List, Optional, Sequence, Tuple
+
+import pandas as pd
 
 from PyQt6 import QtCore, QtGui, QtWidgets
 
+from core.data.chart_loader import ChartDataProvider
 from core.models import ScanResult, TradeSignal
 from core.runners import ScanRunner, ScanSummary
 from core.scans import SCENARIO_REGISTRY, BaseScenario
@@ -14,6 +19,7 @@ from .components import (
     ChartWidget,
     FiltersDock,
     InsightPanel,
+    ResultRow,
     ResultsTableModel,
     ResultsTableView,
     StrategyListWidget,
@@ -40,6 +46,10 @@ class MainWindow(QtWidgets.QMainWindow):
         self._owns_runner = runner is None
         self._bridge = _ScanBridge(self)
         self._signal_store: Dict[str, List[TradeSignal]] = {}
+        self._chart_provider = ChartDataProvider()
+        self._chart_executor = ThreadPoolExecutor(max_workers=1)
+        self._chart_request_token = 0
+        self._active_period = "1y"
 
         self._bridge.resultReceived.connect(self._handle_stream_result)
         self._bridge.progressUpdated.connect(self._update_progress)
@@ -107,6 +117,11 @@ class MainWindow(QtWidgets.QMainWindow):
         self._stop_button.clicked.connect(self._stop_scan)
         self._stop_button.setEnabled(False)
 
+        self._export_button = QtWidgets.QPushButton("Export", self)
+        self._export_button.setShortcut(QtGui.QKeySequence("Ctrl+E"))
+        self._export_button.clicked.connect(self._export_results)
+        self._export_button.setEnabled(False)
+
         toolbar.addWidget(QtWidgets.QLabel("Strategy", self))
         toolbar.addWidget(self._strategy_combo)
         toolbar.addSeparator()
@@ -118,6 +133,7 @@ class MainWindow(QtWidgets.QMainWindow):
         toolbar.addSeparator()
         toolbar.addWidget(self._run_button)
         toolbar.addWidget(self._stop_button)
+        toolbar.addWidget(self._export_button)
 
     def _build_layout(self) -> QtWidgets.QWidget:
         central = QtWidgets.QWidget(self)
@@ -201,6 +217,8 @@ class MainWindow(QtWidgets.QMainWindow):
 
         params = self._filters_dock.parameters()
         period = self._period_combo.currentData()
+        period_str = str(period)
+        self._active_period = period_str
 
         self._signal_store.clear()
         self._results_model.clear()
@@ -208,6 +226,9 @@ class MainWindow(QtWidgets.QMainWindow):
         self._cache_label.setText("Cache: pending")
         self._set_controls_enabled(False)
         self._stop_button.setEnabled(True)
+        self._export_button.setEnabled(False)
+        self._cancel_chart_request()
+        self._chart_widget.clear()
 
         scenario = SCENARIO_REGISTRY[strategy_id]()
 
@@ -221,7 +242,7 @@ class MainWindow(QtWidgets.QMainWindow):
             scenario,
             tickers,
             params=params,
-            period=str(period),
+            period=period_str,
             on_result=_on_result,
             on_progress=_on_progress,
         )
@@ -246,6 +267,8 @@ class MainWindow(QtWidgets.QMainWindow):
         if result is not None:
             self._signal_store[result.symbol] = list(signals)
             self._results_model.upsert_row(result, list(signals))
+            if self._results_model.rowCount() > 0:
+                self._export_button.setEnabled(True)
             if self._results_model.rowCount() == 1:
                 index = self._results_model.index(0, 0)
                 self._results_view.selectRow(0)
@@ -293,8 +316,8 @@ class MainWindow(QtWidgets.QMainWindow):
     def _update_insight_from_index(self, index: QtCore.QModelIndex) -> None:
         if not index.isValid():
             self._insight_panel.show_result(None, [])
+            self._cancel_chart_request()
             self._chart_widget.set_symbol(None)
-            self._chart_widget.display_signals([])
             return
 
         row = index.row()
@@ -305,19 +328,198 @@ class MainWindow(QtWidgets.QMainWindow):
 
         signals = self._signal_store.get(row_data.result.symbol, row_data.signals)
         self._insight_panel.show_result(row_data.result, signals)
-        self._chart_widget.set_symbol(row_data.result.symbol)
+        symbol = row_data.result.symbol
+        self._chart_widget.set_symbol(symbol)
         self._chart_widget.display_signals(signals)
+        self._request_chart_data(symbol)
 
     def _update_selected_signals(self) -> None:
         index = self._results_view.currentIndex()
         if index.isValid():
             self._update_insight_from_index(index)
 
+    def _request_chart_data(self, symbol: str) -> None:
+        if not symbol:
+            return
+        self._chart_request_token += 1
+        token = self._chart_request_token
+        period = self._active_period or str(self._period_combo.currentData() or "1y")
+
+        self._chart_widget.set_loading()
+
+        future: Future[Optional[pd.DataFrame]] = self._chart_executor.submit(
+            self._chart_provider.load,
+            symbol,
+            period,
+        )
+
+        def _relay(fut: Future[Optional[pd.DataFrame]]) -> None:
+            try:
+                frame = fut.result()
+            except Exception as exc:  # pragma: no cover - defensive feedback
+                message = str(exc)
+                QtCore.QTimer.singleShot(
+                    0,
+                    lambda: self._handle_chart_error(token, message),
+                )
+                return
+
+            QtCore.QTimer.singleShot(
+                0,
+                lambda: self._handle_chart_loaded(token, symbol, frame),
+            )
+
+        future.add_done_callback(_relay)
+
+    def _handle_chart_loaded(
+        self, token: int, symbol: str, frame: Optional[pd.DataFrame]
+    ) -> None:
+        if token != self._chart_request_token:
+            return
+        self._chart_widget.set_price_data(frame)
+        if frame is not None and not frame.empty:
+            signals = self._signal_store.get(symbol, [])
+            if signals:
+                self._chart_widget.display_signals(signals)
+
+    def _handle_chart_error(self, token: int, message: str) -> None:
+        if token != self._chart_request_token:
+            return
+        self._chart_widget.set_error(f"Failed to load chart data: {message}")
+
+    def _cancel_chart_request(self) -> None:
+        self._chart_request_token += 1
+
     def _set_controls_enabled(self, enabled: bool) -> None:
         self._run_button.setEnabled(enabled)
         self._strategy_combo.setEnabled(enabled)
         self._period_combo.setEnabled(enabled)
         self._tickers_edit.setEnabled(enabled)
+        self._export_button.setEnabled(enabled and self._results_model.rowCount() > 0)
+
+    def _export_results(self) -> None:
+        rows = self._results_model.rows()
+        if not rows:
+            QtWidgets.QMessageBox.information(
+                self,
+                "Nothing to export",
+                "Run a scan before exporting results.",
+            )
+            return
+
+        default_path = str(Path.home() / "rectifex-results")
+        path_str, selected_filter = QtWidgets.QFileDialog.getSaveFileName(
+            self,
+            "Export scan results",
+            default_path,
+            "Excel Workbook (*.xlsx);;CSV File (*.csv)",
+        )
+        if not path_str:
+            return
+
+        path = Path(path_str)
+        selected_filter = selected_filter or ""
+        if selected_filter.startswith("Excel") and path.suffix.lower() != ".xlsx":
+            path = path.with_suffix(".xlsx")
+        if selected_filter.startswith("CSV") and path.suffix.lower() != ".csv":
+            path = path.with_suffix(".csv")
+
+        try:
+            results_df, signals_df = self._prepare_export_frames(rows, self._signal_store)
+            if path.suffix.lower() == ".csv":
+                results_df.to_csv(path, index=False)
+            else:
+                include_signals = False
+                if not signals_df.empty:
+                    response = QtWidgets.QMessageBox.question(
+                        self,
+                        "Include signals",
+                        "Include a separate 'Signals' sheet with trade signals?",
+                        QtWidgets.QMessageBox.StandardButton.Yes
+                        | QtWidgets.QMessageBox.StandardButton.No,
+                        QtWidgets.QMessageBox.StandardButton.Yes,
+                    )
+                    include_signals = (
+                        response == QtWidgets.QMessageBox.StandardButton.Yes
+                    )
+                with pd.ExcelWriter(path, engine="openpyxl") as writer:
+                    results_df.to_excel(writer, sheet_name="Results", index=False)
+                    if include_signals and not signals_df.empty:
+                        signals_df.to_excel(writer, sheet_name="Signals", index=False)
+            QtWidgets.QMessageBox.information(
+                self,
+                "Export complete",
+                f"Results exported to {path}",
+            )
+        except Exception as exc:  # pragma: no cover - user feedback
+            QtWidgets.QMessageBox.critical(
+                self,
+                "Export failed",
+                f"Unable to export results: {exc}",
+            )
+
+    @staticmethod
+    def _prepare_export_frames(
+        rows: Sequence[ResultRow],
+        signal_store: Dict[str, List[TradeSignal]],
+    ) -> Tuple[pd.DataFrame, pd.DataFrame]:
+        result_records: List[Dict[str, object]] = []
+        aggregated_signals: Dict[str, List[TradeSignal]] = {}
+
+        for row in rows:
+            result = row.result
+            aggregated_signals.setdefault(result.symbol, []).extend(row.signals)
+
+            record: Dict[str, object] = {
+                "Symbol": result.symbol,
+                "Score": round(float(result.score), 2),
+                "Last Price": round(float(result.last_price), 2),
+                "As Of": result.as_of.isoformat(),
+                "Top Reasons": " | ".join(result.reasons),
+            }
+
+            metrics = result.metrics or {}
+            for key, value in sorted(metrics.items()):
+                record[f"metric_{key}"] = value
+
+            if result.meta is not None:
+                record.update(
+                    {
+                        "Name": result.meta.name or "",
+                        "Exchange": result.meta.exchange or "",
+                        "Currency": result.meta.currency or "",
+                        "Market Cap": result.meta.market_cap or "",
+                    }
+                )
+
+            result_records.append(record)
+
+        for symbol, stored in signal_store.items():
+            aggregated_signals.setdefault(symbol, []).extend(stored)
+
+        results_df = pd.DataFrame(result_records)
+        if not results_df.empty:
+            results_df.sort_values("Score", ascending=False, inplace=True, ignore_index=True)
+
+        signal_records: List[Dict[str, object]] = []
+        for symbol, signals in aggregated_signals.items():
+            for signal in signals:
+                signal_records.append(
+                    {
+                        "Symbol": signal.symbol,
+                        "Timestamp": signal.timestamp.isoformat(),
+                        "Side": signal.side.title(),
+                        "Confidence": round(float(signal.confidence), 4),
+                        "Reason": signal.reason,
+                        "Scenario": signal.scenario_id,
+                    }
+                )
+
+        signals_df = pd.DataFrame(signal_records)
+        if not signals_df.empty:
+            signals_df.sort_values(["Symbol", "Timestamp"], inplace=True, ignore_index=True)
+
+        return results_df, signals_df
 
     @staticmethod
     def _period_options() -> Sequence[Tuple[str, str]]:
@@ -337,6 +539,7 @@ class MainWindow(QtWidgets.QMainWindow):
             self._runner.stop()
             if self._owns_runner:
                 self._runner.shutdown()
+            self._chart_executor.shutdown(wait=False)
         finally:
             super().closeEvent(event)
 

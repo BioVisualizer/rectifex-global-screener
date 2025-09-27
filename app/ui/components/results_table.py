@@ -137,6 +137,9 @@ class ResultsTableModel(QtCore.QAbstractTableModel):
             return self._rows[row]
         return None
 
+    def rows(self) -> List[ResultRow]:
+        return list(self._rows)
+
 
 class ResultsTableView(QtWidgets.QTableView):
     """Configured table view for presenting scan results."""

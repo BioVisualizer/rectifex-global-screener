@@ -5,6 +5,12 @@ from datetime import datetime
 
 import pandas as pd
 import pytest
+
+try:
+    import PyQt6.QtWidgets  # noqa: F401
+except Exception:  # pragma: no cover - environment without Qt libraries
+    pytest.skip("PyQt6 is required for UI tests", allow_module_level=True)
+
 from PyQt6 import QtCore
 
 from app.ui.main_window import MainWindow
