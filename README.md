@@ -1,6 +1,5 @@
 # Rectifex Global Screener
 
-<<<<<<< codex/create-comprehensive-readme.md-for-stock-screening-app
 ## Project Overview
 Rectifex Global Screener is a desktop research companion that helps investors and analysts surface potential equity opportunities across global markets. The application blends technical indicators with fundamental ratios to filter large universes of stocks and highlight candidates worth deeper due diligence. Built with Python and PyQt6, the interface is packaged as a Flatpak for seamless deployment on modern Linux distributions.
 
