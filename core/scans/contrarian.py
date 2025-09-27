@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Dict, List, Optional, Tuple
 
 import numpy as np
+import pandas as pd
 
 from core.indicators import bollinger, rsi, stoch
 from core.models import ScanResult, TradeSignal
@@ -41,8 +42,6 @@ class ClassicOversoldScenario(BaseScenario):
         threshold = float(arguments.get("threshold", 50.0))
 
         closes = context.series.close.dropna()
-        lows = context.series.low.reindex(closes.index)
-        highs = context.series.high.reindex(closes.index)
 
         if closes.shape[0] < 40:
             return None, []
