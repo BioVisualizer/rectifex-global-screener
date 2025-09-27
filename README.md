@@ -6,10 +6,11 @@ provides a configurable stock screening experience built on top of **yfinance**.
 
 ## Project Status
 
-The current milestone covers the initial repository scaffolding together with the market data
-fetching/caching infrastructure and a comprehensive library of technical indicators (SMA, EMA,
-RSI, MACD, ATR, Bollinger Bands, Stochastic, ADX, OBV, Keltner Channels, etc.). Many UI
-components are still placeholders that will be fleshed out in subsequent milestones.
+The implementation now includes the complete scan catalogue for the screener. Momentum,
+contrarian, squeeze, floor consolidation, golden cross, and the new LTI Compounder strategies are
+available with deterministic signal generation and scoring. Each scan operates on the shared data
+fetching/caching infrastructure and is covered by unit tests exercising representative scenarios.
+UI components remain placeholders that will be fleshed out in subsequent milestones.
 
 ## Getting Started
 
