@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>com.rectifex.GlobalScreener</id>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>MIT</project_license>
+  <name>Rectifex Global Screener</name>
+  <summary>Discover global equity opportunities with fundamentals-aware timing</summary>
+  <description>
+    <p>
+      Rectifex Global Screener combines Yahoo Finance data downloads, configurable scan
+      strategies, and a PyQt6 UI to surface long-term compounders, breakouts, and squeezes.
+    </p>
+  </description>
+  <launchable type="desktop-id">com.rectifex.GlobalScreener.desktop</launchable>
+  <content_rating type="oars-1.1"/>
+  <releases>
+    <release version="1.0.0" date="2024-07-01"/>
+  </releases>
+</component>

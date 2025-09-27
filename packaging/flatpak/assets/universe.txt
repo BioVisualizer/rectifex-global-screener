@@ -1,0 +1,11 @@
+# Eine pro Zeile, Kommentare erlaubt
+AAPL
+MSFT
+GOOGL
+AMZN
+NVDA
+META
+TSLA
+SAP
+ASML
+NFLX

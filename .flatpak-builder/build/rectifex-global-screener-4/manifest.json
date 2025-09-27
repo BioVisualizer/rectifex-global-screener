@@ -1,0 +1,35 @@
+{
+  "app-id": "com.rectifex.GlobalScreener",
+  "runtime": "org.kde.Platform",
+  "runtime-version": "6.6",
+  "sdk": "org.kde.Sdk",
+  "command": "rectifex-global-screener",
+  "modules": [
+    {
+      "name": "rectifex-global-screener",
+      "buildsystem": "simple",
+      "build-commands": [
+        "pwd && ls -la && ls -la /run/build/rectifex-global-screener" ,
+        "pip3 install --no-deps --no-build-isolation --prefix=/app -r /run/build/rectifex-global-screener/requirements.txt",
+        "mkdir -p /app/rectifex-global-screener",
+        "cp -r . /app/rectifex-global-screener",
+        "install -Dm755 packaging/flatpak/run-app.sh /app/bin/rectifex-global-screener",
+        "install -Dm755 packaging/flatpak/run-cli.sh /app/bin/rectifex-cli",
+        "install -Dm755 debug_fetch.py /app/bin/debug_fetch.py"
+      ],
+      "sources": [
+        {
+          "type": "dir",
+          "path": "."
+        }
+      ]
+    }
+  ],
+  "finish-args": [
+    "--share=network",
+    "--socket=x11",
+    "--socket=wayland",
+    "--filesystem=home",
+    "--device=dri"
+  ]
+}

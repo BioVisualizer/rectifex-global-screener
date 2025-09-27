@@ -1,0 +1,9 @@
+[Desktop Entry]
+Name=Rectifex Global Screener
+Comment=Scan global equities for compounders, breakouts, and squeezes
+Exec=rectifex-global-screener
+Icon=com.rectifex.GlobalScreener
+Terminal=false
+Type=Application
+Categories=Finance;Office;
+StartupNotify=true
