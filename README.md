@@ -7,8 +7,9 @@ provides a configurable stock screening experience built on top of **yfinance**.
 ## Project Status
 
 The current milestone covers the initial repository scaffolding together with the market data
-fetching and caching infrastructure. Many components are placeholders that will be fleshed out
-in subsequent milestones.
+fetching/caching infrastructure and a comprehensive library of technical indicators (SMA, EMA,
+RSI, MACD, ATR, Bollinger Bands, Stochastic, ADX, OBV, Keltner Channels, etc.). Many UI
+components are still placeholders that will be fleshed out in subsequent milestones.
 
 ## Getting Started
 
@@ -43,10 +44,12 @@ The script prints a JSON summary of the downloads and optionally writes to the o
 Pytest-based unit tests are located in the `tests/` directory. Run them with:
 
 ```bash
-pytest
+PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 pytest
 ```
 
-The current suite exercises the caching layer and batch fetcher (with network access mocked).
+The environment flag disables optional Qt-related plugins that require system GUI libraries.
+The current suite exercises the caching layer, batch fetcher (with network access mocked), and
+technical indicator implementations.
 
 ## Project Structure
 
