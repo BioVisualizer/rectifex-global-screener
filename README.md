@@ -18,6 +18,10 @@ and exports findings for further analysis.
 - **Resilient market data pipeline** that caches price history to Parquet,
   indexes metadata in SQLite, retries yfinance downloads with exponential
   backoff, and transparently falls back to stale cache entries when necessary.
+- **Universe loader & cache** that pulls NASDAQ/NYSE/S&P500 lists on demand,
+  stores them as CSV under `~/.cache/com.rectifex.GlobalScreener/universe`, and
+  automatically runs scans against `us-all` when no manual tickers are
+  provided.
 - **Streaming UI** backed by a thread-pooled `ScanRunner`. Results arrive in a
   virtualized table while insights, signal history, and chart overlays update
   instantly without blocking the main event loop.
@@ -66,17 +70,22 @@ rectifex-global-screener/
 
 4. **Execute the CLI**
 
-   Prepare a `tickers.txt` file (one symbol per line) and run:
+   You can provide a ticker file or let the CLI load a universe automatically:
 
    ```bash
    python -m cli.rectifex_cli scan \
      --strategy lti_compounder \
      --profile balanced \
-     --tickers tickers.txt \
+     --universe us-all \
+     --max-tickers 250 \
+     --refresh-days 7 \
      --period 5y \
      --out results.json \
      --include-signals
    ```
+
+   When `--tickers` is omitted the selected universe (default `us-all`) is
+   cached locally and reused until the refresh window expires.
 
 5. **Run tests and linters**
 
@@ -105,6 +114,17 @@ flatpak run --command=rectifex-cli com.rectifex.GlobalScreener --help  # Invoke 
 - When a ticker lacks fundamentals or price history, the scan logs the issue,
   marks the symbol as skipped, and continues processing the rest of the
   universe.
+
+## Ticker Universes & Custom Lists
+
+- Leaving the ticker field empty in the UI automatically loads the selected
+  universe (default: `us-all`) and displays a status hint before the scan
+  starts.
+- The toolbar exposes dropdowns for the universe, a maximum ticker cap, and the
+  refresh interval in days. The same options are available via CLI flags.
+- Cached universes are written to
+  `~/.cache/com.rectifex.GlobalScreener/universe/<name>.csv`. Populate
+  `custom.csv` in that directory to maintain your own set of symbols.
 
 ## Disclaimer
 

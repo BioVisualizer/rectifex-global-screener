@@ -12,7 +12,7 @@ from PyQt6 import QtCore, QtGui, QtWidgets
 
 from core.data.chart_loader import ChartDataProvider
 from core.models import ScanResult, TradeSignal
-from core.runners import ScanRunner, ScanSummary
+from core.runners import ScanConfig, ScanRunner, ScanSummary
 from core.scans import SCENARIO_REGISTRY, BaseScenario
 
 from .components import (
@@ -104,8 +104,23 @@ class MainWindow(QtWidgets.QMainWindow):
             self._period_combo.addItem(label, value)
         self._period_combo.setCurrentIndex(1)
 
+        self._universe_combo = QtWidgets.QComboBox(self)
+        for label, value in self._universe_options():
+            self._universe_combo.addItem(label, value)
+        self._universe_combo.setCurrentIndex(0)
+
+        self._max_tickers_spin = QtWidgets.QSpinBox(self)
+        self._max_tickers_spin.setRange(0, 5000)
+        self._max_tickers_spin.setSpecialValueText("All")
+        self._max_tickers_spin.setValue(0)
+
+        self._refresh_spin = QtWidgets.QSpinBox(self)
+        self._refresh_spin.setRange(1, 365)
+        self._refresh_spin.setSuffix(" d")
+        self._refresh_spin.setValue(7)
+
         self._tickers_edit = QtWidgets.QLineEdit(self)
-        self._tickers_edit.setPlaceholderText("Enter comma separated tickers e.g. AAPL, MSFT, GOOGL")
+        self._tickers_edit.setPlaceholderText("Optional: comma separated tickers e.g. AAPL, MSFT")
         self._tickers_edit.returnPressed.connect(self._start_scan)
 
         self._run_button = QtWidgets.QPushButton("Run", self)
@@ -129,6 +144,15 @@ class MainWindow(QtWidgets.QMainWindow):
         toolbar.addWidget(self._period_combo)
         toolbar.addSeparator()
         toolbar.addWidget(QtWidgets.QLabel("Universe", self))
+        toolbar.addWidget(self._universe_combo)
+        toolbar.addSeparator()
+        toolbar.addWidget(QtWidgets.QLabel("Max tickers", self))
+        toolbar.addWidget(self._max_tickers_spin)
+        toolbar.addSeparator()
+        toolbar.addWidget(QtWidgets.QLabel("Refresh", self))
+        toolbar.addWidget(self._refresh_spin)
+        toolbar.addSeparator()
+        toolbar.addWidget(QtWidgets.QLabel("Tickers", self))
         toolbar.addWidget(self._tickers_edit)
         toolbar.addSeparator()
         toolbar.addWidget(self._run_button)
@@ -206,14 +230,25 @@ class MainWindow(QtWidgets.QMainWindow):
             QtWidgets.QMessageBox.warning(self, "Strategy", "Please select a strategy to run.")
             return
 
-        tickers = self._parse_tickers(self._tickers_edit.text())
-        if not tickers:
-            QtWidgets.QMessageBox.information(
-                self,
-                "Tickers required",
-                "Provide at least one ticker (comma separated) before starting a scan.",
-            )
-            return
+        raw_tickers = self._parse_tickers(self._tickers_edit.text())
+        use_universe = len(raw_tickers) == 0
+
+        universe_key = str(self._universe_combo.currentData())
+        max_tickers = self._max_tickers_spin.value()
+        refresh_days = self._refresh_spin.value()
+        scan_config = ScanConfig(
+            universe=universe_key,
+            max_tickers=max_tickers or None,
+            refresh_secs=refresh_days * 24 * 3600,
+        )
+        self._runner.update_scan_config(scan_config)
+
+        if use_universe:
+            initial_status = f"Kein Ticker angegeben – lade Universum '{universe_key}' …"
+            tickers: Optional[List[str]] = None
+        else:
+            initial_status = "Starting…"
+            tickers = raw_tickers
 
         params = self._filters_dock.parameters()
         period = self._period_combo.currentData()
@@ -222,7 +257,8 @@ class MainWindow(QtWidgets.QMainWindow):
 
         self._signal_store.clear()
         self._results_model.clear()
-        self._progress_label.setText("Starting…")
+        self._progress_label.setText(initial_status)
+        self.statusBar().showMessage(initial_status, 5000)
         self._cache_label.setText("Cache: pending")
         self._set_controls_enabled(False)
         self._stop_button.setEnabled(True)
@@ -394,6 +430,9 @@ class MainWindow(QtWidgets.QMainWindow):
         self._run_button.setEnabled(enabled)
         self._strategy_combo.setEnabled(enabled)
         self._period_combo.setEnabled(enabled)
+        self._universe_combo.setEnabled(enabled)
+        self._max_tickers_spin.setEnabled(enabled)
+        self._refresh_spin.setEnabled(enabled)
         self._tickers_edit.setEnabled(enabled)
         self._export_button.setEnabled(enabled and self._results_model.rowCount() > 0)
 
@@ -529,6 +568,17 @@ class MainWindow(QtWidgets.QMainWindow):
             ("1 Year", "1y"),
             ("2 Years", "2y"),
             ("5 Years", "5y"),
+            ("10 Years", "10y"),
+        )
+
+    @staticmethod
+    def _universe_options() -> Sequence[Tuple[str, str]]:
+        return (
+            ("US – All (NASDAQ + NYSE)", "us-all"),
+            ("S&P 500", "sp500"),
+            ("NASDAQ", "nasdaq"),
+            ("NYSE", "nyse"),
+            ("Custom list", "custom"),
         )
 
     # ------------------------------------------------------------------

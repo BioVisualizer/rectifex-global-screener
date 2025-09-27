@@ -17,5 +17,7 @@ class Cache:
         self.base_dir = _cache_root()
         self.prices_dir = self.base_dir / "prices"
         self.images_dir = self.base_dir / "images"
+        self.universe_dir = self.base_dir / "universe"
         self.prices_dir.mkdir(parents=True, exist_ok=True)
         self.images_dir.mkdir(parents=True, exist_ok=True)
+        self.universe_dir.mkdir(parents=True, exist_ok=True)
