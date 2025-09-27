@@ -19,8 +19,8 @@ __all__ = [
 
 class _BaseFloorScenario(BaseScenario):
     range_window: int = 30
-    breakout_buffer: float = 0.01
-    max_range_pct: float = 0.08
+    breakout_buffer: float = 0.005
+    max_range_pct: float = 0.12
     volume_multiplier: float = 1.25
 
     def _evaluate_common(self, context: object) -> Optional[dict]:
@@ -48,7 +48,8 @@ class _BaseFloorScenario(BaseScenario):
         volume_ma_series = vol_ma(volume, 20)
         last_volume = float(volume.iloc[-1])
         last_volume_ma = float(volume_ma_series.iloc[-1])
-        breakout = last_close >= last_high * (1 + self.breakout_buffer)
+        breakout_trigger = last_high * (1 - self.breakout_buffer)
+        breakout = last_close >= breakout_trigger
         volume_confirm = last_volume_ma > 0 and last_volume >= last_volume_ma * self.volume_multiplier
         rsi_series = rsi(closes, 14)
         last_rsi = float(rsi_series.iloc[-1])

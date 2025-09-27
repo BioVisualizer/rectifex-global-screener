@@ -51,22 +51,30 @@ class ClassicOversoldScenario(BaseScenario):
         bb = bollinger(closes, window=20)
         last_close = closes.iloc[-1]
         last_rsi = float(rsi_series.iloc[-1])
+        recent_rsi = rsi_series.tail(3)
+        recent_min_rsi = float(recent_rsi.min())
+        oversold_recent = recent_min_rsi <= rsi_threshold
         last_lower = float(bb["lower"].iloc[-1])
         prev_close = closes.iloc[-2] if closes.shape[0] >= 2 else np.nan
         candle_reversal = last_close > prev_close and last_close > last_lower
 
-        rsi_score = np.clip((rsi_threshold - last_rsi) / max(rsi_threshold, 1e-3), 0.0, 1.5)
+        rsi_reference = min(last_rsi, recent_min_rsi)
+        rsi_score = np.clip((rsi_threshold - rsi_reference) / max(rsi_threshold, 1e-3), 0.0, 1.5)
         bounce_score = 1.0 if candle_reversal else 0.0
         score = float(np.clip(20.0 + rsi_score * 40.0 + bounce_score * 30.0, 0.0, 100.0))
 
         reasons: List[str] = []
-        if last_rsi <= rsi_threshold:
-            self._append_reason(reasons, f"RSI oversold ({last_rsi:.1f})")
+        if oversold_recent:
+            if last_rsi <= rsi_threshold:
+                rsi_text = f"RSI oversold ({last_rsi:.1f})"
+            else:
+                rsi_text = f"RSI rebounded from {recent_min_rsi:.1f}"
+            self._append_reason(reasons, rsi_text)
         if candle_reversal:
             self._append_reason(reasons, "Reversal candle above lower Bollinger Band")
 
         signals: List[TradeSignal] = []
-        if last_rsi <= rsi_threshold and candle_reversal:
+        if oversold_recent and candle_reversal:
             confidence = self._confidence_from_score(score, threshold)
             signals.append(
                 TradeSignal(
@@ -83,6 +91,7 @@ class ClassicOversoldScenario(BaseScenario):
             "last_close": float(last_close),
             "lower_band": float(last_lower),
             "last_rsi": last_rsi,
+            "recent_min_rsi": recent_min_rsi,
             "score": score,
         }
 
