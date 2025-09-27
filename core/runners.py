@@ -15,6 +15,7 @@ from core.cache import Cache
 from core.data.fetcher import Fetcher
 from core.models import ScanResult, TradeSignal
 from core.scans import SCENARIO_REGISTRY, BaseScenario
+from core.universe import UniverseLoader, UniverseSpec
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -51,6 +52,15 @@ class ScanSummary:
     duration_seconds: float
 
 
+@dataclass(frozen=True)
+class ScanConfig:
+    """Configuration for resolving the scanning universe."""
+
+    universe: str = "us-all"
+    max_tickers: int | None = None
+    refresh_secs: int = 7 * 24 * 3600
+
+
 class ScanRunner:
     """Coordinate fetching, caching and evaluating scan scenarios."""
 
@@ -61,6 +71,7 @@ class ScanRunner:
         cache: Optional[Cache] = None,
         fundamentals_provider: Optional[FundamentalsProvider] = None,
         max_workers: int = 4,
+        scan_config: Optional[ScanConfig] = None,
     ) -> None:
         if max_workers <= 0:
             raise ValueError("max_workers must be positive")
@@ -69,6 +80,7 @@ class ScanRunner:
         self._cache = cache or Cache()
         self._fundamentals_provider = fundamentals_provider or (lambda symbol: None)
         self._max_workers = max_workers
+        self._scan_config = scan_config or ScanConfig()
 
         self._manager_executor = ThreadPoolExecutor(max_workers=1)
         self._active_future: Optional[Future[ScanSummary]] = None
@@ -81,7 +93,7 @@ class ScanRunner:
     def start(
         self,
         strategy: str | BaseScenario,
-        symbols: Sequence[str],
+        symbols: Sequence[str] | None = None,
         *,
         params: Optional[Dict[str, object]] = None,
         period: str = "1y",
@@ -91,7 +103,7 @@ class ScanRunner:
         """Start a scan in the background returning a :class:`Future`."""
 
         scenario = self._resolve_scenario(strategy)
-        symbol_list = self._normalise_symbols(symbols)
+        symbol_list = self._resolve_symbols(symbols)
 
         with self._lock:
             if self._active_future is not None and not self._active_future.done():
@@ -262,7 +274,9 @@ class ScanRunner:
         return scenario_cls()
 
     @staticmethod
-    def _normalise_symbols(symbols: Sequence[str]) -> List[str]:
+    def _normalise_symbols(symbols: Sequence[str] | None) -> List[str]:
+        if not symbols:
+            return []
         deduplicated: List[str] = []
         seen = set()
         for symbol in symbols:
@@ -272,4 +286,26 @@ class ScanRunner:
             seen.add(key)
             deduplicated.append(key)
         return deduplicated
+
+    def _resolve_symbols(self, symbols: Sequence[str] | None) -> List[str]:
+        normalised = self._normalise_symbols(symbols)
+        if normalised:
+            return normalised
+
+        loader = UniverseLoader(self._cache.universe_dir)
+        spec = UniverseSpec(
+            name=self._scan_config.universe,
+            max_count=self._scan_config.max_tickers,
+            refresh_secs=self._scan_config.refresh_secs,
+        )
+        series = loader.load(spec)
+        resolved = [entry.strip().upper() for entry in series.tolist() if entry]
+        if not resolved:
+            raise ValueError("No tickers available for the selected universe.")
+        return resolved
+
+    def update_scan_config(self, config: ScanConfig) -> None:
+        """Update the universe configuration for subsequent scans."""
+
+        self._scan_config = config
 

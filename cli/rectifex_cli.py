@@ -17,7 +17,7 @@ import yfinance as yf
 
 from core.data.fundamentals import read_fundamentals
 from core.models import ScanResult, TradeSignal
-from core.runners import ScanRunner
+from core.runners import ScanConfig, ScanRunner
 from core.scans import SCENARIO_REGISTRY, BaseScenario
 
 _LOGGER = logging.getLogger("rectifex.cli")
@@ -63,7 +63,7 @@ def _parse_args(argv: Optional[Iterable[str]] = None) -> argparse.Namespace:
     parser.add_argument("--version", action="version", version="Rectifex CLI 1.0")
 
     parser.add_argument("--strategy", required=True, help="Identifier of the scan strategy")
-    parser.add_argument("--tickers", required=True, help="Path to a text file with tickers (one per line)")
+    parser.add_argument("--tickers", help="Path to a text file with tickers (one per line)")
     parser.add_argument("--period", default="1y", help="History period to request from yfinance")
     parser.add_argument("--out", required=True, help="Destination JSON file for results")
     parser.add_argument("--profile", help="Optional profile (e.g. for LTI Compounder)")
@@ -80,6 +80,24 @@ def _parse_args(argv: Optional[Iterable[str]] = None) -> argparse.Namespace:
         help="Include trade signal history in the exported JSON",
     )
     parser.add_argument("--workers", type=int, default=4, help="Thread pool size for scenario evaluation")
+    parser.add_argument(
+        "--universe",
+        default="us-all",
+        choices=["us-all", "sp500", "nasdaq", "nyse", "custom"],
+        help="Universe to load when --tickers is omitted",
+    )
+    parser.add_argument(
+        "--max-tickers",
+        type=int,
+        default=None,
+        help="Limit the number of tickers loaded from the selected universe",
+    )
+    parser.add_argument(
+        "--refresh-days",
+        type=int,
+        default=7,
+        help="Refresh interval for cached universes in days",
+    )
 
     return parser.parse_args(argv)
 
@@ -171,22 +189,41 @@ def main(argv: Optional[Iterable[str]] = None) -> int:
     scenario = scenario_cls()
     params = _build_params(scenario, args.params, args.profile)
 
-    tickers_path = Path(args.tickers)
-    try:
-        tickers = _load_tickers(tickers_path)
-    except FileNotFoundError as exc:
-        _LOGGER.error(str(exc))
-        return 1
+    tickers: Optional[List[str]] = None
+    if args.tickers:
+        tickers_path = Path(args.tickers)
+        try:
+            tickers = _load_tickers(tickers_path)
+        except FileNotFoundError as exc:
+            _LOGGER.error(str(exc))
+            return 1
+        if not tickers:
+            _LOGGER.info(
+                "Ticker list is empty (%s) – falling back to universe %s",
+                tickers_path,
+                args.universe,
+            )
+            tickers = None
+    else:
+        _LOGGER.info("No ticker file supplied – loading universe %s", args.universe)
 
-    if not tickers:
-        _LOGGER.error("Ticker list is empty: %s", tickers_path)
-        return 1
+    max_tickers = args.max_tickers if args.max_tickers and args.max_tickers > 0 else None
+    refresh_secs = max(args.refresh_days, 0) * 24 * 3600
+    scan_config = ScanConfig(
+        universe=args.universe,
+        max_tickers=max_tickers,
+        refresh_secs=refresh_secs,
+    )
 
     fundamentals = FundamentalsService()
     results: Dict[str, ScanResult] = {}
     signals: Dict[str, List[TradeSignal]] = {}
 
-    runner = ScanRunner(max_workers=args.workers, fundamentals_provider=fundamentals.get)
+    runner = ScanRunner(
+        max_workers=args.workers,
+        fundamentals_provider=fundamentals.get,
+        scan_config=scan_config,
+    )
 
     def _on_result(result: Optional[ScanResult], emitted: List[TradeSignal]) -> None:
         if result is not None:
