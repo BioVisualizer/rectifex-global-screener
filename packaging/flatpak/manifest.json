@@ -10,7 +10,8 @@
       "buildsystem": "simple",
       "build-commands": [
         "pwd && ls -la && ls -la /run/build/rectifex-global-screener || true",
-        "pip3 install --no-deps --no-build-isolation --prefix=/app -r /run/build/rectifex-global-screener/requirements.txt",
+        "python3 -V && python3 -c \"import sys; print(sys.version)\"" ,
+        "pip3 install --no-deps --no-build-isolation --prefix=/app --no-index --find-links=/run/build/rectifex-global-screener/vendor -r /run/build/rectifex-global-screener/requirements.txt",
         "mkdir -p /app/rectifex-global-screener",
         "cp -r . /app/rectifex-global-screener",
         "install -Dm755 packaging/flatpak/run-app.sh /app/bin/rectifex-global-screener",
@@ -18,14 +19,23 @@
         "install -Dm755 debug_fetch.py /app/bin/debug_fetch.py",
         "install -Dm644 packaging/flatpak/com.rectifex.GlobalScreener.desktop /app/share/applications/com.rectifex.GlobalScreener.desktop",
         "install -Dm644 packaging/flatpak/assets/com.rectifex.GlobalScreener.png /app/share/icons/hicolor/128x128/apps/com.rectifex.GlobalScreener.png",
-        "install -Dm644 app/resources/icons/rectifex-global-screener.png /app/share/icons/hicolor/256x256/apps/com.rectifex.GlobalScreener.png",
+        "install -Dm644 packaging/flatpak/assets/com.rectifex.GlobalScreener-256.png /app/share/icons/hicolor/256x256/apps/com.rectifex.GlobalScreener.png",
         "install -Dm644 packaging/flatpak/com.rectifex.GlobalScreener.metainfo.xml /app/share/metainfo/com.rectifex.GlobalScreener.metainfo.xml"
       ],
       "sources": [
         {
           "type": "dir",
           "path": "../..",
-          "skip": ["venv-flatpak", ".git", ".flatpak-builder"]
+          "skip": [
+            "venv-flatpak",
+            ".git",
+            ".flatpak-builder"
+          ]
+        },
+        {
+          "type": "dir",
+          "path": "vendor",
+          "dest": "vendor"
         }
       ]
     }
