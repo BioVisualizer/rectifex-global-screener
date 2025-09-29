@@ -1,10 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Fall back to ~/.cache if XDG_CACHE_HOME is not set
-export RECTIFEX_CACHE_DIR="${XDG_CACHE_HOME:-$HOME/.cache}/com.rectifex.GlobalScreener"
+# Add the application source directory to Python's path
+export PYTHONPATH=/app/src
 
-# Optional: silence host LD_PRELOAD warnings
-unset LD_PRELOAD || true
-
+# Execute the main application module
 exec python3 -m app "$@"
