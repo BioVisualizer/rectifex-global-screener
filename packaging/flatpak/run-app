@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+set -euo pipefail
+export PYTHONPATH=/app:$PYTHONPATH
+exec /app/bin/python3 -m app "$@"
