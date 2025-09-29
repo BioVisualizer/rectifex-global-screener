@@ -96,13 +96,34 @@ rectifex-global-screener/
 
 ## Flatpak Packaging
 
-The Flatpak manifest installs pinned dependencies, copies the project into the
-application prefix, and exposes launch scripts for both the UI and CLI.
+The Flatpak manifest installs pinned dependencies from `requirements.txt`, copies the application source code into the sandbox, and exposes launch scripts for both the UI and CLI.
+
+### Prerequisites
+
+Before building, ensure you have `flatpak` and `flatpak-builder` installed on your system. You also need to add the Flathub repository and install the required KDE runtime and SDK.
 
 ```bash
-flatpak-builder --user --install --force-clean build-dir packaging/flatpak/manifest.json
-flatpak run com.rectifex.GlobalScreener           # Launch GUI
-flatpak run --command=rectifex-cli com.rectifex.GlobalScreener --help  # Invoke CLI
+# Add the Flathub remote repository (for the current user)
+flatpak remote-add --user --if-not-exists flathub https://flathub.org/repo/flathub.flatpakrepo
+
+# Install the required KDE runtime and SDK (version 6.7)
+flatpak install --user -y flathub org.kde.Sdk//6.7 org.kde.Platform//6.7
+```
+> **Note:** The build environment may require specific workarounds if it does not support sandboxing features like `seccomp`. The provided manifest includes a `no-seccomp` option to accommodate such environments.
+
+### Build & Run
+
+With the prerequisites installed, you can build and run the application:
+
+```bash
+# Build and install the Flatpak package
+flatpak-builder --user --install --force-clean build-dir packaging/flatpak/com.rectifex.GlobalScreener.json
+
+# Launch the GUI
+flatpak run com.rectifex.GlobalScreener
+
+# Invoke the CLI
+flatpak run --command=rectifex-cli com.rectifex.GlobalScreener --help
 ```
 
 ## Data Source & Reliability Notes
