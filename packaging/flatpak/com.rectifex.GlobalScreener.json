@@ -17,7 +17,7 @@
             "name": "setuptools",
             "buildsystem": "simple",
             "build-commands": [
-                "pip3 install --prefix=/app --no-index --find-links=. ."
+                "pip3 install --prefix=/app --ignore-installed --no-index --find-links=. ."
             ],
             "sources": [
                 {
