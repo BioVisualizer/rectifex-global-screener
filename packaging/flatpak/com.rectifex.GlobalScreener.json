@@ -20,7 +20,7 @@
                 "no-seccomp": true
             },
             "build-commands": [
-                "pip3 install --prefix=/app --no-index --find-links=packaging/flatpak/vendor -r requirements.txt",
+                "pip3 install --prefix=/app --no-index --find-links=packaging/flatpak/vendor -r packaging/flatpak/flatpak-requirements.txt",
                 "mkdir -p /app/src",
                 "cp -r app core cli /app/src/",
                 "install -Dm755 packaging/flatpak/run-app.sh /app/bin/run-app.sh",
